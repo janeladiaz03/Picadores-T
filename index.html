@@ -206,7 +206,7 @@ input[type=time]:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 2p
 .cal-day.cal-today{background:var(--blue-l);color:var(--blue);font-weight:700;}
 .cal-day.cal-weekend{color:var(--text3);}
 .cal-day.cal-holiday{background:var(--teal-l);color:var(--teal);font-weight:700;}
-.cal-day.cal-nonwork{background:var(--gray-l);color:var(--text3);}
+.cal-day.cal-permission{background:var(--purple-l);color:var(--purple);font-weight:700;}
 .cal-day.cal-selected{outline:2px solid var(--blue);outline-offset:1px;}
 .cal-day .cal-dot{position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;}
 .cal-legend{display:flex;flex-direction:column;gap:5px;margin-top:10px;}
@@ -454,11 +454,8 @@ input[type=time]:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 2p
         <div class="form-field span2"><label>Nombre completo</label><input type="text" id="nEmpName" placeholder="Nombre del empleado"></div>
         <div class="form-field"><label>Código AC</label><input type="text" id="nEmpCode" placeholder="Ej: 400"></div>
         <div class="form-field"><label>Equipo</label><select id="nEmpTeam"></select></div>
-        <div class="form-field"><label>Modalidad</label>
-          <select id="nEmpTipe"><option value="Presencial">Presencial</option><option value="Remoto">Remoto</option><option value="Híbrido">Híbrido</option></select>
-        </div>
       </div>
-    </div>
+      <p style="font-size:11px;color:var(--text3);margin-top:10px;">&#128161; La modalidad (Presencial/Remoto/Híbrido) se asigna automáticamente según el horario que configures.</p>
     <div class="modal-foot"><button class="btn btn-gray" onclick="closeModal('addEmpModal')">Cancelar</button><button class="btn btn-primary" onclick="saveNewEmp()">&#10003; Guardar</button></div>
   </div>
 </div>
@@ -478,27 +475,38 @@ input[type=time]:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 2p
 </div>
 
 <div class="modal-overlay" id="addEventModal">
-  <div class="modal">
+  <div class="modal" style="width:500px;">
     <div class="modal-head"><h3>&#43; Agregar día especial</h3><span class="modal-close" onclick="closeModal('addEventModal')">&#x2715;</span></div>
     <div class="modal-body">
       <div class="form-grid">
-        <div class="form-field span2"><label>Nombre / descripción</label><input type="text" id="evName" placeholder="Ej: Feriado nacional, Día libre..."></div>
+        <div class="form-field span2"><label>Nombre / descripción</label><input type="text" id="evName" placeholder="Ej: Año nuevo, Permiso médico..."></div>
         <div class="form-field"><label>Fecha</label><input type="date" id="evDate" style="height:34px;font-size:13px;"></div>
         <div class="form-field"><label>Tipo</label>
           <select id="evType">
-            <option value="holiday">🏖 Feriado nacional</option>
-            <option value="permission">📋 Permiso / evento</option>
-            <option value="nonwork">🚫 No laborable</option>
+            <option value="holiday">🏖 Feriado (aplica a todos)</option>
+            <option value="nonwork">🚫 No laborable (aplica a todos)</option>
+            <option value="permission">📋 Permiso personal</option>
           </select>
         </div>
         <div class="form-field"><label>Mes</label>
           <select id="evMonth"><option value="1">Mes 1 · 2026</option><option value="2">Mes 2 · 2026</option></select>
         </div>
-        <div class="form-field"><label>Afecta a</label>
-          <select id="evScope"><option value="all">Todos</option><option value="team">Un equipo</option></select>
+        <div class="form-field" style="opacity:0"></div>
+        <!-- Holiday note -->
+        <div class="form-field span2" id="evHolNote">
+          <div style="background:var(--teal-l);border:1px solid var(--teal-m);border-radius:7px;padding:9px 12px;font-size:12px;color:var(--teal);">
+            🏖 Los <strong>feriados y días no laborables</strong> se aplican automáticamente a <strong>todo el personal</strong>. No se descuenta como falta.
+          </div>
         </div>
-        <div class="form-field span2" id="evTeamField" style="display:none;"><label>Equipo afectado</label><select id="evTeam"></select></div>
-        <div class="form-field span2"><label>Notas adicionales</label><textarea id="evNotes" placeholder="Opcional..." style="height:60px;"></textarea></div>
+        <!-- Permission: person selector -->
+        <div class="form-field span2" id="evPermField" style="display:none;">
+          <label>Empleado que recibe el permiso</label>
+          <select id="evEmp" style="height:34px;font-size:13px;"></select>
+          <div style="background:var(--purple-l);border:1px solid var(--purple-m);border-radius:7px;padding:9px 12px;font-size:12px;color:var(--purple);margin-top:7px;">
+            📋 El <strong>permiso personal</strong> aplica únicamente al empleado seleccionado y no se contabiliza como falta.
+          </div>
+        </div>
+        <div class="form-field span2"><label>Notas adicionales</label><textarea id="evNotes" placeholder="Opcional..." style="height:55px;"></textarea></div>
       </div>
     </div>
     <div class="modal-foot"><button class="btn btn-gray" onclick="closeModal('addEventModal')">Cancelar</button><button class="btn btn-purple" onclick="saveEvent()">&#10003; Guardar día especial</button></div>
@@ -931,9 +939,8 @@ function getFilteredEmps(){
 }
 function refreshTeamSelects(){
   const all=[...TEAMS];
-  ['nEmpTeam','evTeam'].forEach(id=>{const el=document.getElementById(id);if(!el)return;const v=el.value;el.innerHTML=all.map(t=>`<option value="${t}">${t}</option>`).join('');el.value=v;});
+  ['nEmpTeam'].forEach(id=>{const el=document.getElementById(id);if(!el)return;const v=el.value;el.innerHTML=all.map(t=>`<option value="${t}">${t}</option>`).join('');el.value=v;});
   const tf=document.getElementById('empTeamF');if(tf){tf.innerHTML='<option value="">Todos los equipos</option>'+all.map(t=>`<option value="${t}">${t}</option>`).join('');}
-  const tfb=document.getElementById('filterBar').querySelector('#fTeamT,#fTeamP');if(tfb){/* rebuilt by renderFilterBar */}
 }
 function renderTeamsList(){
   document.getElementById('teamsList').innerHTML=TEAMS.map(t=>{
@@ -973,94 +980,197 @@ function renderEmpList(){
     </div>`).join('');
 }
 
+/* ── Auto-detect modality from schedule ── */
+function autoModality(id){
+  const sched=SCHEDS[id]||{};
+  const modes=Object.values(SCHEDS[id]?.dayMode||{}).filter(Boolean);
+  if(!modes.length)return 'Presencial';
+  const uniq=[...new Set(modes)];
+  if(uniq.length===1)return uniq[0]==='Remoto'?'Remoto':'Presencial';
+  return 'Híbrido';
+}
+function modeBadge(m){
+  const cfg={Presencial:{bg:'var(--blue-l)',c:'var(--blue)',ic:'🏢'},Remoto:{bg:'var(--green-l)',c:'var(--green)',ic:'🏠'},Híbrido:{bg:'var(--purple-l)',c:'var(--purple)',ic:'🔀'}};
+  const d=cfg[m]||{bg:'var(--gray-l)',c:'var(--gray)',ic:'—'};
+  return`<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:${d.bg};color:${d.c};border:1px solid ${d.c}44">${d.ic} ${m}</span>`;
+}
+
+/* ── Weekly grid schedule editor ── */
 function renderEmpDetail(id){
   selEmpId=id;
   const e=EMPS[id];if(!e)return;
-  const c=teamColor(e.equipo);const bg=c+'22';
-  const sched=SCHEDS[id]||{};
-  let schedRows='';
-  for(let wd=0;wd<=6;wd++){
-    if(!sched[wd])continue;
-    sched[wd].forEach((block,bi)=>{
-      const isMorning=block[0]<720;
-      schedRows+=`<tr>
-        <td><span class="day-pill">${DAY_NAMES[wd]}</span></td>
-        <td><input type="time" value="${fmM(block[0])}" onchange="updateBlock('${id}',${wd},${bi},0,this.value)" style="width:100px;"></td>
-        <td><input type="time" value="${fmM(block[1])}" onchange="updateBlock('${id}',${wd},${bi},1,this.value)" style="width:100px;"></td>
-        <td style="color:var(--text3);font-size:11px">${((block[1]-block[0])/60).toFixed(1)}h</td>
-        <td><span class="pill" style="font-size:10px;background:${isMorning?'var(--amber-l)':'var(--blue-l)'};color:${isMorning?'var(--amber)':'var(--blue)'};border-color:${isMorning?'#fcd34d':'var(--blue-m)'}">${isMorning?'☀️ 10m tol.':'🌙 Exacto'}</span></td>
-        <td><span class="icon-btn icon-btn-del" onclick="deleteBlock('${id}',${wd},${bi})">&#128465;</span></td>
-      </tr>`;
-    });
-  }
-  if(!schedRows)schedRows=`<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:16px;font-size:12px;">Sin horario asignado</td></tr>`;
-
-  const tipeOpts=['Presencial','Remoto','Híbrido'].map(t=>`<option${(e.tipe||'Presencial')===t?' selected':''}>${t}</option>`).join('');
+  if(!SCHEDS[id])SCHEDS[id]={};
+  if(!SCHEDS[id].dayMode)SCHEDS[id].dayMode={};
+  const sched=SCHEDS[id];
+  const modality=autoModality(id);
   const teamOpts=TEAMS.map(t=>`<option${e.equipo===t?' selected':''}>${t}</option>`).join('');
+
+  // Build weekly grid rows (Mon=0 to Sun=6, show Mon-Sat by default)
+  const gridRows=DAY_NAMES.slice(0,7).map((dayName,wd)=>{
+    const active=!!(sched[wd]&&sched[wd].length);
+    const blocks=sched[wd]||[];
+    const mode=sched.dayMode[wd]||'Presencial';
+    const modeColor=mode==='Remoto'?'#16a34a':'#2563eb';
+    const modeBg=mode==='Remoto'?'var(--green-l)':'var(--blue-l)';
+
+    // Block inputs (up to 2)
+    const b0=blocks[0]||null;
+    const b1=blocks[1]||null;
+    const totalH=blocks.reduce((s,b)=>(b[1]-b[0])/60+s,0);
+    const tolTag=blocks.length?blocks.map(b=>`<span style="font-size:9px;padding:1px 5px;border-radius:10px;background:${b[0]<720?'var(--amber-l)':'var(--blue-l)'};color:${b[0]<720?'var(--amber)':'var(--blue)'}">${b[0]<720?'☀️10m':'🌙Exacto'}</span>`).join(' '):'';
+
+    return`<tr id="gr_${id}_${wd}" style="opacity:${active?1:.45};transition:opacity .2s">
+      <td style="width:36px;text-align:center;">
+        <input type="checkbox" ${active?'checked':''} onchange="toggleDay('${id}',${wd},this.checked)"
+          style="width:16px;height:16px;cursor:pointer;accent-color:var(--blue);">
+      </td>
+      <td style="width:90px;font-weight:600;font-size:12px;">${dayName}</td>
+      <td style="width:110px;">
+        <select onchange="setDayMode('${id}',${wd},this.value)" style="height:26px;font-size:11px;padding:2px 6px;border-color:${modeColor}44;background:${modeBg};color:${modeColor};font-weight:600;">
+          <option value="Presencial" ${mode==='Presencial'?'selected':''}>🏢 Presencial</option>
+          <option value="Remoto" ${mode==='Remoto'?'selected':''}>🏠 Remoto</option>
+        </select>
+      </td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <!-- Block 0 -->
+          <div style="display:flex;align-items:center;gap:3px;background:var(--gray-ll);border:1px solid var(--border);border-radius:6px;padding:3px 7px;">
+            <input type="time" value="${b0?fmM(b0[0]):'09:00'}" ${!active?'disabled':''}
+              onchange="setBlockTime('${id}',${wd},0,0,this.value)"
+              style="border:none;background:transparent;font-size:12px;width:80px;padding:0;height:22px;">
+            <span style="color:var(--text3);font-size:11px">→</span>
+            <input type="time" value="${b0?fmM(b0[1]):'13:00'}" ${!active?'disabled':''}
+              onchange="setBlockTime('${id}',${wd},0,1,this.value)"
+              style="border:none;background:transparent;font-size:12px;width:80px;padding:0;height:22px;">
+            ${active&&blocks.length>0?`<span class="icon-btn icon-btn-del" onclick="removeBlock('${id}',${wd},0)" style="width:18px;height:18px;font-size:10px;margin-left:2px;">✕</span>`:''}
+          </div>
+          <!-- Block 1 -->
+          ${b1?`<div style="display:flex;align-items:center;gap:3px;background:var(--gray-ll);border:1px solid var(--border);border-radius:6px;padding:3px 7px;">
+            <input type="time" value="${fmM(b1[0])}"
+              onchange="setBlockTime('${id}',${wd},1,0,this.value)"
+              style="border:none;background:transparent;font-size:12px;width:80px;padding:0;height:22px;">
+            <span style="color:var(--text3);font-size:11px">→</span>
+            <input type="time" value="${fmM(b1[1])}"
+              onchange="setBlockTime('${id}',${wd},1,1,this.value)"
+              style="border:none;background:transparent;font-size:12px;width:80px;padding:0;height:22px;">
+            <span class="icon-btn icon-btn-del" onclick="removeBlock('${id}',${wd},1)" style="width:18px;height:18px;font-size:10px;margin-left:2px;">✕</span>
+          </div>`:
+          active&&blocks.length<2?`<span onclick="addBlock('${id}',${wd})" style="font-size:11px;font-weight:600;color:var(--blue);cursor:pointer;padding:3px 8px;border:1px dashed var(--blue-m);border-radius:6px;white-space:nowrap;">+ turno tarde</span>`:''}
+          ${active&&totalH>0?`<span style="font-size:11px;font-weight:700;color:var(--green);min-width:30px">${totalH.toFixed(1)}h</span>`:''}
+          ${tolTag}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Summary
+  const totalWeekH=Object.values(sched).filter(v=>Array.isArray(v)).flat().reduce((s,b)=>(b[1]-b[0])/60+s,0);
 
   document.getElementById('empDetail').innerHTML=`
     <div class="detail-head">
       ${av(e.name,e.equipo,52)}
       <div style="flex:1;">
-        <h3 style="font-size:16px;font-weight:700;">${e.name}</h3>
-        <p style="font-size:12px;color:var(--text2);margin-top:3px;">ID: ${id}</p>
-        <div class="detail-fields">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <h3 style="font-size:16px;font-weight:700;">${e.name}</h3>
+          ${modeBadge(modality)}
+        </div>
+        <p style="font-size:11px;color:var(--text2);margin-top:4px;">ID: ${id} &nbsp;·&nbsp; ${totalWeekH.toFixed(1)}h/semana</p>
+        <div class="detail-fields" style="margin-top:10px;">
           <div class="field-group"><div class="field-label">Equipo</div>
             <select style="height:30px;font-size:12px;" onchange="updateEmpField('${id}','equipo',this.value)">${teamOpts}</select>
           </div>
-          <div class="field-group"><div class="field-label">Modalidad</div>
-            <select style="height:30px;font-size:12px;" onchange="updateEmpField('${id}','tipe',this.value)">${tipeOpts}</select>
+          <div class="field-group"><div class="field-label">Modalidad (auto)</div>
+            <div style="height:30px;display:flex;align-items:center;">${modeBadge(modality)}</div>
           </div>
         </div>
       </div>
       <button class="btn btn-danger btn-sm" onclick="confirmDeleteEmp('${id}')">&#128465; Eliminar</button>
     </div>
+
     <div class="sched-card">
-      <div class="sched-head"><h4>&#128197; Horario semanal</h4><button class="btn btn-primary btn-sm" onclick="openAddBlockModal('${id}')">&#43; Agregar bloque</button></div>
+      <div class="sched-head">
+        <h4>&#128197; Horario semanal — edición rápida</h4>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-gray btn-sm" onclick="applyAllDays('${id}','09:00','13:00','Presencial')">&#9654; Aplicar mañana todos</button>
+          <button class="btn btn-gray btn-sm" onclick="applyAllDays('${id}','14:00','18:00','Presencial')">&#9654; Aplicar tarde todos</button>
+        </div>
+      </div>
+      <div style="padding:10px 16px 4px;font-size:11px;color:var(--text3);">
+        ☀️ Entrada antes de 12:00 → tolerancia 10 min &nbsp;·&nbsp; 🌙 Entrada desde 12:00 → puntualidad exacta &nbsp;·&nbsp;
+        <strong style="color:var(--text2);">Activa el día y ajusta los horarios directo en la tabla</strong>
+      </div>
       <table class="sched-table" style="width:100%;">
-        <thead><tr><th>Día</th><th>Entrada</th><th>Salida</th><th>Horas</th><th>Tolerancia</th><th>Acción</th></tr></thead>
-        <tbody>${schedRows}</tbody>
+        <thead><tr>
+          <th style="width:36px;">&#10003;</th>
+          <th>Día</th><th>Modalidad</th><th>Horario(s)</th>
+        </tr></thead>
+        <tbody>${gridRows}</tbody>
       </table>
     </div>`;
   renderEmpList();
 }
 
-function updateEmpField(id,field,val){EMPS[id][field]=val;toast('✓ Guardado');renderEmpList();}
-function updateBlock(id,wd,bi,pos,ts){const[h,m]=ts.split(':').map(Number);if(!SCHEDS[id]||!SCHEDS[id][wd])return;SCHEDS[id][wd][bi][pos]=h*60+m;toast('✓ Horario actualizado');setTimeout(()=>renderEmpDetail(id),100);}
-function deleteBlock(id,wd,bi){if(!SCHEDS[id]||!SCHEDS[id][wd])return;SCHEDS[id][wd].splice(bi,1);if(!SCHEDS[id][wd].length)delete SCHEDS[id][wd];toast('✓ Bloque eliminado');renderEmpDetail(id);}
-
-function openAddBlockModal(empId){
-  const existing=document.getElementById('addBlockModal');if(existing)existing.remove();
-  document.body.insertAdjacentHTML('beforeend',`
-    <div class="modal-overlay open" id="addBlockModal" onclick="if(event.target===this)this.remove()">
-      <div class="modal">
-        <div class="modal-head"><h3>&#43; Agregar bloque de horario</h3><span class="modal-close" onclick="document.getElementById('addBlockModal').remove()">&#x2715;</span></div>
-        <div class="modal-body">
-          <div class="form-grid">
-            <div class="form-field"><label>Día</label><select id="abDay">${DAY_NAMES.map((d,i)=>`<option value="${i}">${d}</option>`).join('')}</select></div>
-            <div class="form-field" style="opacity:0"></div>
-            <div class="form-field"><label>Hora entrada</label><input type="time" id="abIn" value="09:00" style="height:34px;font-size:13px;"></div>
-            <div class="form-field"><label>Hora salida</label><input type="time" id="abOut" value="13:00" style="height:34px;font-size:13px;"></div>
-          </div>
-          <p style="font-size:11px;color:var(--text3);margin-top:12px;">☀️ Antes de 12:00 → tolerancia 10 min &nbsp;·&nbsp; 🌙 Desde 12:00 → puntualidad exacta</p>
-        </div>
-        <div class="modal-foot">
-          <button class="btn btn-gray" onclick="document.getElementById('addBlockModal').remove()">Cancelar</button>
-          <button class="btn btn-primary" onclick="saveBlock('${empId}')">&#10003; Guardar bloque</button>
-        </div>
-      </div>
-    </div>`);
+function toggleDay(id,wd,on){
+  if(!SCHEDS[id])SCHEDS[id]={dayMode:{}};
+  if(!SCHEDS[id].dayMode)SCHEDS[id].dayMode={};
+  if(on){
+    if(!SCHEDS[id][wd]||!SCHEDS[id][wd].length)SCHEDS[id][wd]=[[9*60,13*60]];
+  } else {
+    delete SCHEDS[id][wd];
+  }
+  autoUpdateModality(id);renderEmpDetail(id);
 }
-function saveBlock(id){
-  const wd=parseInt(document.getElementById('abDay').value);
-  const tin=document.getElementById('abIn').value,tout=document.getElementById('abOut').value;
+function setDayMode(id,wd,mode){
+  if(!SCHEDS[id])SCHEDS[id]={dayMode:{}};
+  if(!SCHEDS[id].dayMode)SCHEDS[id].dayMode={};
+  SCHEDS[id].dayMode[wd]=mode;
+  autoUpdateModality(id);
+  // Re-render just the badge without full redraw
+  const m=autoModality(id);
+  renderEmpList();
+  toast('✓ Modo cambiado a '+mode);
+}
+function setBlockTime(id,wd,bi,pos,ts){
+  const[h,m]=ts.split(':').map(Number);
+  if(!SCHEDS[id]||!SCHEDS[id][wd]||!SCHEDS[id][wd][bi])return;
+  SCHEDS[id][wd][bi][pos]=h*60+m;
+  // Live update hours display without full redraw
+  const blocks=SCHEDS[id][wd];
+  const totalH=blocks.reduce((s,b)=>(b[1]-b[0])/60+s,0);
+  const row=document.getElementById('gr_'+id+'_'+wd);
+  if(row){const hSpan=row.querySelector('span[data-hd]');if(hSpan)hSpan.textContent=totalH.toFixed(1)+'h';}
+  toast('✓ Horario actualizado');
+}
+function addBlock(id,wd){
+  if(!SCHEDS[id]||!SCHEDS[id][wd])return;
+  SCHEDS[id][wd].push([14*60,18*60]);
+  renderEmpDetail(id);
+}
+function removeBlock(id,wd,bi){
+  if(!SCHEDS[id]||!SCHEDS[id][wd])return;
+  SCHEDS[id][wd].splice(bi,1);
+  if(!SCHEDS[id][wd].length)delete SCHEDS[id][wd];
+  renderEmpDetail(id);toast('✓ Turno eliminado');
+}
+function applyAllDays(id,tin,tout,mode){
   const[hi,mi]=tin.split(':').map(Number);const[ho,mo]=tout.split(':').map(Number);
-  const si=hi*60+mi,so=ho*60+mo;
-  if(so<=si){toast('⚠ Salida debe ser después de entrada');return;}
-  if(!SCHEDS[id])SCHEDS[id]={};if(!SCHEDS[id][wd])SCHEDS[id][wd]=[];
-  SCHEDS[id][wd].push([si,so]);SCHEDS[id][wd].sort((a,b)=>a[0]-b[0]);
-  document.getElementById('addBlockModal').remove();toast('✓ Bloque agregado');renderEmpDetail(id);
+  if(!SCHEDS[id])SCHEDS[id]={dayMode:{}};
+  if(!SCHEDS[id].dayMode)SCHEDS[id].dayMode={};
+  for(let wd=0;wd<=5;wd++){  // Mon-Sat
+    if(!SCHEDS[id][wd])SCHEDS[id][wd]=[];
+    // Only add if this block doesn't overlap existing
+    const si=hi*60+mi,so=ho*60+mo;
+    if(!SCHEDS[id][wd].some(b=>b[0]===si&&b[1]===so))
+      SCHEDS[id][wd].push([si,so]);
+    SCHEDS[id].dayMode[wd]=mode;
+  }
+  autoUpdateModality(id);renderEmpDetail(id);toast('✓ Aplicado a Lun–Sáb');
 }
+function autoUpdateModality(id){
+  if(!EMPS[id])return;
+  EMPS[id].tipe=autoModality(id);
+}
+function updateEmpField(id,field,val){EMPS[id][field]=val;toast('✓ Guardado');renderEmpList();}
 function confirmDeleteEmp(id){
   document.getElementById('confirmMsg').innerHTML=`¿Eliminar a <strong>${EMPS[id]?.name}</strong>?<br><br>El perfil se elimina del sistema. Los registros de picadas no se borran.`;
   document.getElementById('confirmBtn').onclick=()=>{delete EMPS[id];delete SCHEDS[id];selEmpId=null;document.getElementById('empDetail').innerHTML='<div class="empty-state"><div class="empty-icon">&#128100;</div><div class="empty-title">Selecciona un empleado</div></div>';renderEmpList();closeModal('confirmModal');toast('✓ Empleado eliminado');};
@@ -1070,10 +1180,11 @@ function saveNewEmp(){
   const name=document.getElementById('nEmpName').value.trim();
   const code=document.getElementById('nEmpCode').value.trim();
   const team=document.getElementById('nEmpTeam').value;
-  const tipe=document.getElementById('nEmpTipe').value;
   if(!name||!code){toast('⚠ Nombre y código requeridos');return;}
   if(EMPS[code]){toast('⚠ Código ya existe');return;}
-  EMPS[code]={name,equipo:team,tipe};closeModal('addEmpModal');
+  EMPS[code]={name,equipo:team,tipe:'Presencial'};
+  SCHEDS[code]={dayMode:{}};
+  closeModal('addEmpModal');
   document.getElementById('nEmpName').value='';document.getElementById('nEmpCode').value='';
   renderEmpList();toast('✓ Empleado agregado: '+name);renderEmpDetail(code);
 }
@@ -1082,56 +1193,82 @@ function saveNewEmp(){
 function renderCalendar(){
   const months=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   document.getElementById('calTitle').textContent=months[calMonth]+' '+calYear;
-  const firstDay=new Date(calYear,calMonth,1).getDay(); // 0=Sun
   const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
-  const offset=(firstDay+6)%7; // adjust to Mon-first
-  const evDates={};SPECIAL_DAYS.forEach(ev=>{evDates[ev.date]=(evDates[ev.date]||[]);evDates[ev.date].push(ev);});
-  const today=new Date();const todayStr=today.toISOString().split('T')[0];
+  const offset=(new Date(calYear,calMonth,1).getDay()+6)%7;
+  const evDates={};SPECIAL_DAYS.forEach(ev=>{(evDates[ev.date]=evDates[ev.date]||[]).push(ev);});
+  const todayStr=new Date().toISOString().split('T')[0];
   let html='';
   for(let i=0;i<offset;i++)html+=`<div class="cal-day cal-empty"></div>`;
   for(let d=1;d<=daysInMonth;d++){
     const ds=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const dow=(new Date(calYear,calMonth,d).getDay()+6)%7; // 0=Mon
+    const dow=(new Date(calYear,calMonth,d).getDay()+6)%7;
     const evs=evDates[ds]||[];
     const isWeekend=dow>=5;
-    const isToday=ds===todayStr;
-    let cls='cal-day';
-    if(isWeekend)cls+=' cal-weekend';
-    if(isToday)cls+=' cal-today';
+    let cls='cal-day'+(isWeekend?' cal-weekend':'')+(ds===todayStr?' cal-today':'');
     if(evs.some(e=>e.type==='holiday'))cls+=' cal-holiday';
     else if(evs.some(e=>e.type==='nonwork'))cls+=' cal-nonwork';
-    const dotColor=evs.some(e=>e.type==='permission')?'#7c3aed':'transparent';
-    html+=`<div class="${cls}" onclick="calDayClick('${ds}')" title="${evs.map(e=>e.name).join(', ')||''}">${d}${evs.length?`<span class="cal-dot" style="background:${dotColor}"></span>`:''}`;
+    else if(evs.some(e=>e.type==='permission'))cls+=' cal-permission';
+    const tt=evs.map(e=>e.type==='permission'?`${e.empName}: ${e.name}`:e.name).join('\n');
+    html+=`<div class="${cls}" onclick="calDayClick('${ds}')" title="${tt||'Clic para agregar'}">${d}${evs.length?`<span class="cal-dot" style="background:${evs.some(e=>e.type==='permission')?'#7c3aed':'transparent'}"></span>`:''}`;
     html+=`</div>`;
   }
   document.getElementById('calDays').innerHTML=html;
 }
 function calNav(dir){calMonth+=dir;if(calMonth>11){calMonth=0;calYear++;}else if(calMonth<0){calMonth=11;calYear--;}renderCalendar();}
-function calDayClick(ds){document.getElementById('evDate').value=ds;openAddEventModal();}
+function calDayClick(ds){
+  document.getElementById('evDate').value=ds;
+  // Estimate month from date
+  const m=parseInt(ds.split('-')[1]);
+  document.getElementById('evMonth').value=m<=3?'1':'2';
+  openAddEventModal();
+}
 function openAddEventModal(){
-  populateEventTeamSel();
-  document.getElementById('evScope').onchange=function(){document.getElementById('evTeamField').style.display=this.value==='team'?'':'none';};
+  populateEventEmpSel();
+  updateEventFormFields();
+  document.getElementById('evType').onchange=updateEventFormFields;
   openModal('addEventModal');
 }
-function populateEventTeamSel(){
-  const sel=document.getElementById('evTeam');if(!sel)return;
-  sel.innerHTML=TEAMS.filter(t=>t!=='Sin equipo').map(t=>`<option value="${t}">${t}</option>`).join('');
+function updateEventFormFields(){
+  const type=document.getElementById('evType').value;
+  const holNote=document.getElementById('evHolNote');
+  const permField=document.getElementById('evPermField');
+  if(type==='holiday'){
+    holNote.style.display='';permField.style.display='none';
+  } else if(type==='permission'){
+    holNote.style.display='none';permField.style.display='';
+  } else {
+    holNote.style.display='none';permField.style.display='none';
+  }
+}
+function populateEventEmpSel(){
+  const sel=document.getElementById('evEmp');if(!sel)return;
+  const prev=sel.value;
+  sel.innerHTML=`<option value="">— Seleccionar empleado —</option>`+
+    Object.entries(EMPS).sort((a,b)=>a[1].name.localeCompare(b[1].name))
+      .map(([id,e])=>`<option value="${id}">${e.name} (${e.equipo})</option>`).join('');
+  sel.value=prev;
 }
 function saveEvent(){
   const name=document.getElementById('evName').value.trim();
   const date=document.getElementById('evDate').value;
   const type=document.getElementById('evType').value;
   const month=parseInt(document.getElementById('evMonth').value);
-  const scope=document.getElementById('evScope').value;
-  const team=scope==='team'?document.getElementById('evTeam').value:'all';
   const notes=document.getElementById('evNotes').value.trim();
   if(!name||!date){toast('⚠ Nombre y fecha requeridos');return;}
-  SPECIAL_DAYS.push({id:nextSpecialId++,name,date,type,month,scope,team,notes});
+  const ev={id:nextSpecialId++,name,date,type,month,notes};
+  if(type==='holiday'||type==='nonwork'){
+    ev.scope='all';ev.empId=null;ev.empName='Todos';
+  } else {
+    const empId=document.getElementById('evEmp').value;
+    if(!empId){toast('⚠ Debes seleccionar un empleado para el permiso');return;}
+    ev.scope='person';ev.empId=empId;ev.empName=EMPS[empId]?.name||empId;
+  }
+  SPECIAL_DAYS.push(ev);
   closeModal('addEventModal');
   document.getElementById('evName').value='';document.getElementById('evNotes').value='';
   renderCalendar();renderEventsList();renderCalImpact();
-  toast('✓ Día especial agregado');
   document.getElementById('holCount').textContent=SPECIAL_DAYS.filter(e=>e.month===1).length;
+  toast('✓ Día especial agregado');
 }
 function deleteEvent(id){SPECIAL_DAYS=SPECIAL_DAYS.filter(e=>e.id!==id);renderCalendar();renderEventsList();renderCalImpact();toast('✓ Eliminado');}
 function renderEventsList(){
@@ -1141,27 +1278,27 @@ function renderEventsList(){
   if(mf)evs=evs.filter(e=>String(e.month)===mf);
   if(tf)evs=evs.filter(e=>e.type===tf);
   document.getElementById('evCount').textContent=evs.length+' eventos';
-  const TYPE_CFG={holiday:{label:'Feriado',icon:'🏖',col:'#0d9488'},permission:{label:'Permiso',icon:'📋',col:'#7c3aed'},nonwork:{label:'No laborable',icon:'🚫',col:'#64748b'}};
+  const TCFG={holiday:{label:'Feriado',icon:'🏖',col:'#0d9488'},permission:{label:'Permiso personal',icon:'📋',col:'#7c3aed'},nonwork:{label:'No laborable',icon:'🚫',col:'#64748b'}};
   document.getElementById('eventsList').innerHTML=evs.length?evs.sort((a,b)=>a.date.localeCompare(b.date)).map(ev=>{
-    const cfg=TYPE_CFG[ev.type]||{label:ev.type,icon:'📅',col:'#2563eb'};
+    const cfg=TCFG[ev.type]||{label:ev.type,icon:'📅',col:'#2563eb'};
+    const who=ev.type==='holiday'?'Todo el personal':ev.type==='nonwork'?'Todo el personal':`👤 ${ev.empName||'?'}`;
     return`<div class="event-item">
       <div class="event-dot" style="background:${cfg.col}"></div>
       <div class="event-info">
         <div class="event-name">${cfg.icon} ${ev.name}</div>
-        <div class="event-meta">${fmD(ev.date)} · ${cfg.label} · ${ev.scope==='all'?'Todos los equipos':ev.team} ${ev.notes?'· '+ev.notes:''}</div>
+        <div class="event-meta">${fmD(ev.date)} · ${cfg.label} · ${who}${ev.notes?' · '+ev.notes:''}</div>
       </div>
       <span class="event-del" onclick="deleteEvent(${ev.id})">&#x2715;</span>
     </div>`;}).join(''):`<div class="empty-state" style="padding:24px;"><div class="empty-icon" style="font-size:28px;">📅</div><div class="empty-sub">No hay días especiales registrados</div></div>`;
 }
 function renderCalImpact(){
-  const evsByMonth={1:SPECIAL_DAYS.filter(e=>e.month===1),2:SPECIAL_DAYS.filter(e=>e.month===2)};
-  const byType=t=>Object.entries(evsByMonth).map(([m,evs])=>evs.filter(e=>e.type===t).length);
+  const byType=t=>([1,2].map(m=>SPECIAL_DAYS.filter(e=>e.month===m&&e.type===t).length));
   const ctx=document.getElementById('cCalImpact');if(!ctx)return;
   if(charts.calImpact)charts.calImpact.destroy();
   charts.calImpact=new Chart(ctx,{type:'bar',
     data:{labels:['Mes 1','Mes 2'],datasets:[
-      {label:'Feriados',data:byType('holiday'),backgroundColor:'rgba(13,148,136,.8)',borderRadius:4},
-      {label:'Permisos',data:byType('permission'),backgroundColor:'rgba(124,58,237,.8)',borderRadius:4},
+      {label:'Feriados (todos)',data:byType('holiday'),backgroundColor:'rgba(13,148,136,.8)',borderRadius:4},
+      {label:'Permisos (personales)',data:byType('permission'),backgroundColor:'rgba(124,58,237,.8)',borderRadius:4},
       {label:'No laborables',data:byType('nonwork'),backgroundColor:'rgba(100,116,139,.8)',borderRadius:4},
     ]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'top',labels:{color:'#475569',font:{size:11},boxWidth:10,padding:10}}},
