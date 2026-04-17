@@ -624,13 +624,12 @@ let GLOBAL_EV = ls_get('GLOBAL_EV') || [];
 let nextEvId = Math.max(0,...GLOBAL_EV.map(e=>e.id||0),...Object.values(EMP_EV).flat().map(e=>e.id||0)) + 1;
 
 function buildDefaultScheds(){
-  // Build schedules from embedded Excel data
   const S={};
   Object.entries(RAW.schedules||{}).forEach(([id,dayData])=>{
     S[id]={dayMode:{}};
     Object.entries(dayData).forEach(([k,v])=>{
-      if(k==='dayMode')S[id].dayMode=v;
-      else S[id][parseInt(k)]=v;
+      if(k==='dayMode'){S[id].dayMode=v||{};}
+      else{const wdN=parseInt(k);if(!isNaN(wdN)&&Array.isArray(v))S[id][wdN]=v;}
     });
   });
   return S;
@@ -659,7 +658,7 @@ function calcForEmployee(empId){
     const ds = cur.toISOString().split('T')[0];
     const wd = (cur.getDay()+6)%7; // 0=Mon
     const dayPairs = rawDays[ds] || [];
-    const blocks = sched[wd] || [];
+    const blocks = sched[wd] || sched[String(wd)] || [];
 
     if(blocks.length){
       // Employee has scheduled blocks today
@@ -956,20 +955,21 @@ function renderEmpList(){
   document.getElementById('empListItems').innerHTML=items.map(([id,e])=>`<div class="ei${selEmpId===id?' act':''}" onclick="openEmpDet('${id}')">${av(e.name,e.equipo,34)}<div><div class="ei-name">${e.name}</div><div class="ei-sub">ID ${id} · ${e.equipo} · ${e.tipe||'Presencial'}</div></div></div>`).join('');
 }
 
-function openEmpDet(id){selEmpId=id;renderEmpDet(id);}
+function openEmpDet(id){selEmpId=String(id);renderEmpDet(String(id));}
 function renderEmpDet(id){
-  selEmpId=id;const e=EMPS[id];if(!e)return;
+  id=String(id);selEmpId=id;const e=EMPS[id];if(!e)return;
   if(!SCHEDS[id])SCHEDS[id]={dayMode:{}};
   if(!SCHEDS[id].dayMode)SCHEDS[id].dayMode={};
-  const sched=SCHEDS[id];
+  const sched=SCHEDS[id]||{dayMode:{}}; if(!SCHEDS[id])SCHEDS[id]=sched;
   const modality=autoModality(id);
-  const totalWeekH=Object.entries(sched).filter(([k])=>!isNaN(k)&&sched[k]).reduce((s,[,b])=>s+b.reduce((a,bl)=>(bl[1]-bl[0])/60+a,0),0);
+  const totalWeekH=Object.entries(sched).filter(([k])=>!isNaN(k)&&Array.isArray(sched[k])).reduce((s,[,b])=>s+b.reduce((a,bl)=>Array.isArray(bl)&&bl.length>=2?(bl[1]-bl[0])/60+a:a,0),0);
   const teamOpts=TEAMS.map(t=>`<option${e.equipo===t?' selected':''}>${t}</option>`).join('');
-  const empEvs=(EMP_EV[id]||[]).sort((a,b)=>a.dateFrom.localeCompare(b.dateFrom));
+  const empEvs=EMP_EV[id]||[];  // raw list, sorted below
 
   // Build weekly grid
   const gridRows=DN.map((dayName,wd)=>{
-    const active=!!(sched[wd]&&sched[wd].length);const blocks=sched[wd]||[];const mode=sched.dayMode[wd]||'Presencial';
+    const wdBlocks=sched[wd]||sched[String(wd)]||[];
+    const active=!!(wdBlocks&&wdBlocks.length);const blocks=wdBlocks;const mode=(sched.dayMode||{})[wd]||(sched.dayMode||{})[String(wd)]||'Presencial';
     const modeColor=mode==='Remoto'?'#16a34a':'#2563eb';const modeBg=mode==='Remoto'?'var(--green-l)':'var(--blue-l)';
     const b0=blocks[0]||null,b1=blocks[1]||null;const totalH=blocks.reduce((s,b)=>(b[1]-b[0])/60+s,0);
     return`<tr id="gr_${id}_${wd}" style="opacity:${active?1:.4};transition:opacity .2s">
@@ -994,9 +994,16 @@ function renderEmpDet(id){
       </div></td>
     </tr>`;}).join('');
 
+  // Note for employees without raw picada data
+  const hasRawEvents=!!(RAW_EVENTS[id]&&Object.keys(RAW_EVENTS[id]).length);
+  const noDataNote=!hasRawEvents?`<div style="background:var(--amber-l);border:1px solid #fcd34d;border-radius:8px;padding:10px 13px;font-size:12px;color:var(--amber);margin-bottom:13px;">⚠️ <strong>${e.name}</strong> no tiene picadas registradas en el sistema para el período actual. Configura su horario aquí — los cálculos se actualizarán automáticamente cuando subas su Excel de asistencia.</div>`:'';
+
   // Employee events list
-  const evHtml=empEvs.length?empEvs.map(ev=>{const cfg=evCfg(ev.type);const days=daysInRange(ev.dateFrom,ev.dateTo);return`<div class="ev-item"><div class="ev-dot" style="background:${cfg.c}"></div><div class="ev-inf"><div class="ev-name">${cfg.ic} ${ev.reason||ev.type}</div><div class="ev-meta">${fmD(ev.dateFrom)}${ev.dateTo&&ev.dateTo!==ev.dateFrom?' → '+fmD(ev.dateTo):''} · ${cfg.l} · ${days} día${days>1?'s':''} · Mes ${ev.mes}</div>${ev.subtype?`<div class="ev-meta" style="margin-top:1px;">Subtipo: ${ev.subtype}</div>`:''}</div><span class="ev-del" onclick="delEmpEv('${id}',${ev.id})">✕</span></div>`;}).join(''):
-    `<div class="empty" style="padding:20px;"><div class="empty-ic" style="font-size:28px;">📋</div><div class="empty-s">Sin permisos, vacaciones ni justificaciones</div></div>`;
+  const empEvsSorted=(EMP_EV[id]||[]).sort((a,b)=>(a.dateFrom||'').localeCompare(b.dateFrom||''));
+  const evHtml=empEvsSorted.length?empEvsSorted.map(ev=>{
+    const cfg=evCfg(ev.type);const days=daysInRange(ev.dateFrom,ev.dateTo);
+    return`<div class="ev-item"><div class="ev-dot" style="background:${cfg.c}"></div><div class="ev-inf"><div class="ev-name">${cfg.ic} ${ev.reason||ev.type}</div><div class="ev-meta">${fmD(ev.dateFrom)}${ev.dateTo&&ev.dateTo!==ev.dateFrom?' → '+fmD(ev.dateTo):''} · ${cfg.l} · ${days} día${days>1?'s':''} · Mes ${ev.mes||'—'}</div>${ev.subtype?`<div class="ev-meta" style="margin-top:1px;">Subtipo: ${ev.subtype}</div>`:''}</div><span class="ev-del" onclick="delEmpEv('${id}',${ev.id})">✕</span></div>`;
+  }).join(''):`<div class="empty" style="padding:20px;"><div class="empty-ic" style="font-size:28px;">📋</div><div class="empty-s">Sin permisos, vacaciones ni justificaciones</div></div>`;
 
   document.getElementById('empDet').innerHTML=noDataNote+`
     <div class="dh">
@@ -1037,16 +1044,16 @@ function renderEmpDet(id){
   renderEmpList();
 }
 
-function updEmpF(id,f,v){EMPS[id][f]=v;save('EMPS');renderEmpList();}
-function toggleDay(id,wd,on){if(!SCHEDS[id])SCHEDS[id]={dayMode:{}};if(!SCHEDS[id].dayMode)SCHEDS[id].dayMode={};if(on){if(!SCHEDS[id][wd]||!SCHEDS[id][wd].length)SCHEDS[id][wd]=[[9*60,13*60]];}else{delete SCHEDS[id][wd];}invalidateCache(id);updMod(id);save('SCHEDS');renderEmpDet(id);}
-function setDayMode(id,wd,mode){if(!SCHEDS[id])SCHEDS[id]={dayMode:{}};if(!SCHEDS[id].dayMode)SCHEDS[id].dayMode={};SCHEDS[id].dayMode[wd]=mode;updMod(id);save('SCHEDS');}
-function setBlockTime(id,wd,bi,pos,ts){const[h,m]=ts.split(':').map(Number);if(!SCHEDS[id]||!SCHEDS[id][wd]||!SCHEDS[id][wd][bi])return;SCHEDS[id][wd][bi][pos]=h*60+m;invalidateCache(id);save('SCHEDS');}
-function addBlock(id,wd){if(!SCHEDS[id]||!SCHEDS[id][wd])return;SCHEDS[id][wd].push([14*60,18*60]);invalidateCache(id);save('SCHEDS');renderEmpDet(id);}
-function rmBlock(id,wd,bi){if(!SCHEDS[id]||!SCHEDS[id][wd])return;SCHEDS[id][wd].splice(bi,1);if(!SCHEDS[id][wd].length)delete SCHEDS[id][wd];invalidateCache(id);save('SCHEDS');renderEmpDet(id);}
-function applyAll(id,ti,to,mode){const[hi,mi]=ti.split(':').map(Number);const[ho,mo]=to.split(':').map(Number);const si=hi*60+mi,so=ho*60+mo;if(!SCHEDS[id])SCHEDS[id]={dayMode:{}};if(!SCHEDS[id].dayMode)SCHEDS[id].dayMode={};for(let wd=0;wd<=5;wd++){if(!SCHEDS[id][wd])SCHEDS[id][wd]=[];if(!SCHEDS[id][wd].some(b=>b[0]===si&&b[1]===so))SCHEDS[id][wd].push([si,so]);SCHEDS[id].dayMode[wd]=mode;}invalidateCache(id);updMod(id);save('SCHEDS');renderEmpDet(id);}
-function clearAll(id){if(!SCHEDS[id])return;for(let wd=0;wd<=6;wd++)delete SCHEDS[id][wd];SCHEDS[id].dayMode={};invalidateCache(id);updMod(id);save('SCHEDS');renderEmpDet(id);}
+function updEmpF(id,f,v){id=String(id);if(!EMPS[id])return;EMPS[id][f]=v;if(f==='equipo')invalidateCache(id);save('EMPS');renderEmpList();renderEmpDet(id);}
+function toggleDay(id,wd,on){id=String(id);wd=parseInt(wd);if(!SCHEDS[id])SCHEDS[id]={dayMode:{}};if(!SCHEDS[id].dayMode)SCHEDS[id].dayMode={};if(on){if(!SCHEDS[id][wd]||!SCHEDS[id][wd].length)SCHEDS[id][wd]=[[9*60,13*60]];}else{delete SCHEDS[id][wd];}invalidateCache(id);updMod(id);save('SCHEDS');renderEmpDet(id);}
+function setDayMode(id,wd,mode){id=String(id);wd=parseInt(wd);if(!SCHEDS[id])SCHEDS[id]={dayMode:{}};if(!SCHEDS[id].dayMode)SCHEDS[id].dayMode={};SCHEDS[id].dayMode[wd]=mode;updMod(id);save('SCHEDS');}
+function setBlockTime(id,wd,bi,pos,ts){id=String(id);wd=parseInt(wd);bi=parseInt(bi);pos=parseInt(pos);const[h,m]=ts.split(':').map(Number);if(!SCHEDS[id])return;if(!SCHEDS[id][wd])return;if(!SCHEDS[id][wd][bi])return;SCHEDS[id][wd][bi][pos]=h*60+m;invalidateCache(id);save('SCHEDS');}
+function addBlock(id,wd){id=String(id);wd=parseInt(wd);if(!SCHEDS[id])SCHEDS[id]={dayMode:{}};if(!SCHEDS[id][wd])SCHEDS[id][wd]=[];SCHEDS[id][wd].push([14*60,18*60]);invalidateCache(id);save('SCHEDS');renderEmpDet(id);}
+function rmBlock(id,wd,bi){id=String(id);wd=parseInt(wd);bi=parseInt(bi);if(!SCHEDS[id]||!SCHEDS[id][wd])return;SCHEDS[id][wd].splice(bi,1);if(!SCHEDS[id][wd].length)delete SCHEDS[id][wd];invalidateCache(id);save('SCHEDS');renderEmpDet(id);}
+function applyAll(id,ti,to,mode){id=String(id);const[hi,mi]=ti.split(':').map(Number);const[ho,mo]=to.split(':').map(Number);const si=hi*60+mi,so=ho*60+mo;if(!SCHEDS[id])SCHEDS[id]={dayMode:{}};if(!SCHEDS[id].dayMode)SCHEDS[id].dayMode={};for(let wd=0;wd<=5;wd++){if(!Array.isArray(SCHEDS[id][wd]))SCHEDS[id][wd]=[];if(!SCHEDS[id][wd].some(b=>b[0]===si&&b[1]===so))SCHEDS[id][wd].push([si,so]);SCHEDS[id].dayMode[wd]=mode;}invalidateCache(id);updMod(id);save('SCHEDS');renderEmpDet(id);}
+function clearAll(id){id=String(id);if(!SCHEDS[id])SCHEDS[id]={dayMode:{}};for(let wd=0;wd<=6;wd++){delete SCHEDS[id][wd];delete SCHEDS[id][String(wd)];}SCHEDS[id].dayMode={};invalidateCache(id);updMod(id);save('SCHEDS');renderEmpDet(id);}
 function updMod(id){if(EMPS[id])EMPS[id].tipe=autoModality(id);invalidateCache(id);save('EMPS');}
-function confirmDelEmp(id){confirm2(`¿Eliminar a <strong>${EMPS[id]?.name}</strong>?<br><br>El perfil se elimina del sistema. Los registros de picadas no se borran.`,()=>{delete EMPS[id];delete SCHEDS[id];delete EMP_EV[id];selEmpId=null;document.getElementById('empDet').innerHTML='<div class="empty"><div class="empty-ic">&#128100;</div><div class="empty-t">Selecciona un empleado</div></div>';save('EMPS');save('SCHEDS');save('EMP_EV');renderEmpList();});}
+function confirmDelEmp(id){id=String(id);confirm2(`¿Eliminar a <strong>${EMPS[id]?.name}</strong>?<br><br>El perfil se elimina del sistema. Los registros de picadas no se borran.`,()=>{delete EMPS[id];delete SCHEDS[id];delete EMP_EV[id];selEmpId=null;document.getElementById('empDet').innerHTML='<div class="empty"><div class="empty-ic">&#128100;</div><div class="empty-t">Selecciona un empleado</div></div>';save('EMPS');save('SCHEDS');save('EMP_EV');renderEmpList();});}
 
 /* TEAMS */
 function renderTeamsList(){
@@ -1057,7 +1064,7 @@ function saveNewEmp(){const name=document.getElementById('nEmpName').value.trim(
 
 /* EMP EVENTS */
 let curEmpEvId=null;
-function openEmpEvModal(id){curEmpEvId=id;document.getElementById('moAddEmpEvTitle').textContent=`📋 Evento para ${sN(EMPS[id]?.name||id)}`;updateEvForm();showMo('moAddEmpEv');}
+function openEmpEvModal(id){curEmpEvId=String(id);document.getElementById('moAddEmpEvTitle').textContent=`📋 Evento para ${sN(EMPS[id]?.name||id)}`;updateEvForm();showMo('moAddEmpEv');}
 function updateEvForm(){
   const type=document.getElementById('evType')?.value;
   const nb=document.getElementById('evNoteBox');const sr=document.getElementById('evSubtypeRow');if(!nb||!sr)return;
@@ -1073,7 +1080,7 @@ function saveEmpEvent(){
   hideMo('moAddEmpEv');['evFrom','evTo','evReason'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   save('EMP_EV');renderEmpDet(curEmpEvId);renderCalendar();renderCalEvents();renderCalCharts();renderCalSideStats();
 }
-function delEmpEv(empId,evId){EMP_EV[empId]=(EMP_EV[empId]||[]).filter(e=>e.id!==evId);save('EMP_EV');renderEmpDet(empId);renderCalendar();renderCalEvents();renderCalCharts();renderCalSideStats();}
+function delEmpEv(empId,evId){empId=String(empId);EMP_EV[empId]=(EMP_EV[empId]||[]).filter(e=>e.id!==evId);save('EMP_EV');renderEmpDet(empId);renderCalendar();renderCalEvents();renderCalCharts();renderCalSideStats();}
 
 /* ═══════════════════════════════════════
    CALENDAR PAGE
@@ -1361,7 +1368,7 @@ function promptNextNewEmp(){
   const emp=newEmpQueue[curNewEmpIdx];pendingNewEmpId=emp.id;
   const id=emp.id;const e=EMPS[id]||{name:id};
   if(!SCHEDS[id])SCHEDS[id]={dayMode:{}};
-  const sched=SCHEDS[id];
+  const sched=SCHEDS[id]||{dayMode:{}}; if(!SCHEDS[id])SCHEDS[id]=sched;
   const teamOpts=TEAMS.map(t=>`<option>${t}</option>`).join('');
   const gridRows=DN.map((dayName,wd)=>{
     const active=!!(sched[wd]&&sched[wd].length);const b0=sched[wd]?.[0]||null;
